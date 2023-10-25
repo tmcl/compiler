@@ -1,0 +1,3 @@
+[submodule "mcc"]
+	path = mcc
+	url = https://github.com/jmorag/mcc
