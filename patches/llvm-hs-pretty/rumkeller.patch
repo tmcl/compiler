@@ -1,0 +1,19 @@
+commit 9492ebdd92985abb6c95e8479363a7f04a011dea
+Author: Roland Zumkeller <Roland.Zumkeller@gmail.com>
+Date:   Tue Jan 4 05:40:01 2022 +0000
+
+    Fix as-pattern for GHC 9.
+
+diff --git a/src/LLVM/Pretty.hs b/src/LLVM/Pretty.hs
+index 22ccce8..672ac12 100644
+--- a/src/LLVM/Pretty.hs
++++ b/src/LLVM/Pretty.hs
+@@ -475,7 +475,7 @@ instance Pretty Terminator where
+      brackets (hsep [ label (pretty l) | l <- dests ])
+      <+> ppInstrMeta meta
+ 
+-    e @ Invoke {..} ->
++    e@Invoke {..} ->
+      ppInvoke e
+      <+> "to" <+> label (pretty returnDest)
+      <+> "unwind" <+> label (pretty exceptionDest)
