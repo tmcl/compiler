@@ -26,30 +26,14 @@
 
         devShell = let
           haskellDeps = ps: [
-            ps.array
             ps.base
-            ps.bytestring
-            ps.containers
-            ps.criterion
-            ps.directory
-            ps.filepath
-            ps.llvm-hs
-            ps.llvm-hs-pretty 
-            ps.llvm-hs-pure 
             ps.megaparsec
-            ps.mtl
-            ps.optparse-applicative
-            ps.parser-combinators
-            ps.prettyprinter
-            ps.pretty-simple
-            ps.process
-            ps.string-conversions
-            ps.tasty
-            ps.tasty-golden
-            ps.tasty-hunit
             ps.text
-            ps.unix
-
+            ps.haskeline
+            ps.mtl
+            ps.tasty
+            ps.tasty-hspec
+            ps.hspec-megaparsec
           ];
 
         in pkgs.mkShell {
@@ -60,12 +44,10 @@
             pkgs.cabal-install
             pkgs.haskell-language-server
             pkgs.ormolu
-            pkgs.clang_9
+            pkgs.clang_16
             pkgs.nixfmt
             pkgs.ghcid
             pkgs.vscodium
-            pkgs.haskellPackages.happy
-            pkgs.haskellPackages.alex
           ];
         };
       });
