@@ -3,19 +3,22 @@
 
 module Kaleido.AST where
 
-import Data.Char qualified
 import Data.Text qualified
 import Prelude (Double)
 import Text.Show qualified
 import Data.Eq qualified
+
+data StatementAST
+  = StatementAstExpr ExprAST
+  | StatementAstExtern PrototypeExprAST
+  | StatementAstFunction FunctionExprAST
+  deriving (Text.Show.Show, Data.Eq.Eq)
 
 data ExprAST
   = ExprAstNumber NumberExprAST
   | ExprAstVariable VariableExprAST
   | ExprAstBinary BinaryExprAST
   | ExprAstCall CallExprAST
-  | ExprAstPrototype PrototypeExprAST
-  | ExprAstFunction FunctionExprAST
   deriving (Text.Show.Show, Data.Eq.Eq)
 
 newtype NumberExprAST = NumberExprAST
@@ -28,8 +31,11 @@ newtype VariableExprAST = VariableExprAst
   }
   deriving (Text.Show.Show, Data.Eq.Eq)
 
+data BinOp = Plus | Times | Divide | Minus | LT
+  deriving (Text.Show.Show, Data.Eq.Eq)
+
 data BinaryExprAST = BinaryExprAST
-  { op :: Data.Char.Char,
+  { op :: BinOp,
     lhs :: ExprAST,
     rhs :: ExprAST
   }

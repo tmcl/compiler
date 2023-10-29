@@ -46,10 +46,11 @@ parens = Text.Megaparsec.between (symbol "(") (symbol ")")
 expr :: Parser Kaleido.AST.ExprAST
 expr = Control.Monad.Combinators.Expr.makeExprParser
   term
-   [[binary "*" (mkBin '*')
-    , binary "/" (mkBin '/')]
-   ,[binary "+" (mkBin '+')
-    , binary "-" (mkBin '-')]
+   [[binary "*" (mkBin Kaleido.AST.Times)
+    , binary "/" (mkBin Kaleido.AST.Divide)]
+   ,[binary "+" (mkBin Kaleido.AST.Plus)
+    , binary "-" (mkBin Kaleido.AST.Minus)]
+   ,[binary "<" (mkBin Kaleido.AST.LT)]
    ]
 
    where mkBin op lhs rhs = Kaleido.AST.ExprAstBinary Kaleido.AST.BinaryExprAST { .. }
@@ -84,23 +85,23 @@ proto = do
   args <- parens $ many identifier
   pure $ Kaleido.AST.PrototypeExprAST {..}
 
-function :: Parser Kaleido.AST.ExprAST
+function :: Parser Kaleido.AST.StatementAST
 function = do
   _ <- lexeme "def"
   p <- proto
   f <- expr
-  pure $ Kaleido.AST.ExprAstFunction $ Kaleido.AST.FunctionExprAST p f
+  pure $ Kaleido.AST.StatementAstFunction $ Kaleido.AST.FunctionExprAST p f
 
-extern :: Parser Kaleido.AST.ExprAST
+extern :: Parser Kaleido.AST.StatementAST
 extern = do
   _ <- lexeme "extern"
-  Kaleido.AST.ExprAstPrototype <$> proto
+  Kaleido.AST.StatementAstExtern <$> proto
 
-defn :: Parser Kaleido.AST.ExprAST
-defn = extern <|> function <|> expr
+defn :: Parser Kaleido.AST.StatementAST
+defn = extern <|> function <|> (Kaleido.AST.StatementAstExpr <$> expr)
 
-toplevel :: Parser [Kaleido.AST.ExprAST]
+toplevel :: Parser [Kaleido.AST.StatementAST]
 toplevel = Text.Megaparsec.many (defn <* lexeme ";")
 
-parseTopLevel :: Data.Text.Text -> Either ParserErrorBundle [Kaleido.AST.ExprAST]
+parseTopLevel :: Data.Text.Text -> Either ParserErrorBundle [Kaleido.AST.StatementAST]
 parseTopLevel = Text.Megaparsec.parse (toplevel <* Text.Megaparsec.eof) "<stdin>"

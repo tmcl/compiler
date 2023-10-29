@@ -56,7 +56,7 @@ library
     import:           common
 
     -- Modules exported by the library.
-    exposed-modules:  Kaleido.Parser Kaleido.AST
+    exposed-modules:  Kaleido.Parser Kaleido.AST Kaleido.CodeGen
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -68,7 +68,10 @@ library
     build-depends:    base ^>=4.17.2.0
       , megaparsec
       , text
+      , mtl
+      , containers
       , parser-combinators
+      , llvm-hs-pure
 
     -- Directories containing source files.
     hs-source-dirs:   lib
@@ -93,6 +96,9 @@ executable kaleido
     build-depends:
         base ^>=4.17.2.0,
         kaleido, haskeline, mtl, text, megaparsec
+      , transformers
+      , llvm-hs-pretty
+      , llvm-hs-pure
 
     -- Directories containing source files.
     hs-source-dirs:   app
