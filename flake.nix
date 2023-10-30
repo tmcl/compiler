@@ -34,6 +34,7 @@
             ps.tasty
             ps.tasty-hspec
             ps.hspec-megaparsec
+            ps.llvm-hs
             ps.llvm-hs-pure
             ps.llvm-hs-pretty
           ];

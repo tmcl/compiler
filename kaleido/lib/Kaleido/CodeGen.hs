@@ -16,7 +16,6 @@ import Control.Monad.State.Strict qualified
 import Data.Map qualified
 import Data.String qualified
 import Data.Text qualified
-import Debug.Trace
 import Kaleido.AST qualified
 import LLVM.AST qualified
 import LLVM.AST.FloatingPointPredicate qualified
@@ -111,7 +110,6 @@ codegenBody llvmName args body =
         -- LLVM.IRBuilder.Instruction.store addr 0 op
         -- registerOperand arg addr
         registerOperand arg op
-      Debug.Trace.traceShowM =<< Control.Monad.State.gets operands
       LLVM.IRBuilder.Instruction.ret =<< codegenExpr body
 
 locally :: (Control.Monad.State.MonadState s m) => m a -> m a

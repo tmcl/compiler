@@ -99,6 +99,8 @@ executable kaleido
       , transformers
       , llvm-hs-pretty
       , llvm-hs-pure
+      , llvm-hs
+      , bytestring
 
     -- Directories containing source files.
     hs-source-dirs:   app
