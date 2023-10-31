@@ -1,14 +1,14 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 -- We need these to write a ConvertibleStrings instance for
 -- ShortByteString
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Kaleido.CodeGen (codegenStatement, codegen, steppableCodegen, Env(..), State(..), newEmptyState) where
+module Kaleido.CodeGen (codegenStatement, codegen, steppableCodegen, Env (..), State (..), newEmptyState) where
 
 import Control.Monad
 import Control.Monad.State qualified
@@ -21,17 +21,17 @@ import LLVM.AST qualified
 import LLVM.AST.FloatingPointPredicate qualified
 import LLVM.AST.Name qualified
 import LLVM.AST.Type qualified
+import LLVM.IRBuilder qualified
 import LLVM.IRBuilder.Constant qualified
 import LLVM.IRBuilder.Instruction qualified
+import LLVM.IRBuilder.Internal.SnocList qualified
 import LLVM.IRBuilder.Module qualified
 import LLVM.IRBuilder.Monad qualified
-import LLVM.IRBuilder.Internal.SnocList qualified
 import LLVM.Prelude qualified
-import LLVM.IRBuilder qualified
 
 data Env = Env
-  { operands :: Data.Map.Map Data.Text.Text LLVM.AST.Operand
-  , moduleState :: LLVM.IRBuilder.IRBuilderState
+  { operands :: Data.Map.Map Data.Text.Text LLVM.AST.Operand,
+    moduleState :: LLVM.IRBuilder.IRBuilderState
   }
 
 registerOperand ::
@@ -82,8 +82,8 @@ codegenExpr (Kaleido.AST.ExprAstCall (Kaleido.AST.CallExprAST callee args)) = do
 
 codegenStatement :: Kaleido.AST.StatementAST -> LLVM LLVM.AST.Operand
 codegenStatement (Kaleido.AST.StatementAstExpr body) = do
-    nm <- LLVM.IRBuilder.Monad.freshUnName
-    codegenBody nm [] body
+  nm <- LLVM.IRBuilder.Monad.freshUnName
+  codegenBody nm [] body
 codegenStatement (Kaleido.AST.StatementAstExtern (Kaleido.AST.PrototypeExprAST name args)) = do
   function <- LLVM.IRBuilder.Module.extern (LLVM.AST.Name.mkName (Data.Text.unpack name)) (LLVM.AST.Type.double <$ args) LLVM.AST.Type.double
   registerOperand name function
@@ -96,7 +96,7 @@ codegenStatement (Kaleido.AST.StatementAstFunction (Kaleido.AST.FunctionExprAST 
     llvmName = LLVM.AST.Name.mkName (Data.Text.unpack name)
 
 codegenBody :: LLVM.AST.Name.Name -> [Data.Text.Text] -> Kaleido.AST.ExprAST -> LLVM LLVM.AST.Operand
-codegenBody llvmName args body = 
+codegenBody llvmName args body =
   locally $ do
     params <- mapM mkParam args
     LLVM.IRBuilder.Module.function llvmName params LLVM.AST.Type.double genBody
@@ -139,14 +139,14 @@ runModuleBuilderT ::
 runModuleBuilderT s (LLVM.IRBuilder.Module.ModuleBuilderT m) =
   Control.Monad.State.runStateT m s
 
-data State = State { mbsState :: LLVM.IRBuilder.Module.ModuleBuilderState, cgState :: Kaleido.CodeGen.Env }
+data State = State {mbsState :: LLVM.IRBuilder.Module.ModuleBuilderState, cgState :: Kaleido.CodeGen.Env}
 
 newEmptyState :: State
 newEmptyState = State LLVM.IRBuilder.Module.emptyModuleBuilder (Env mempty LLVM.IRBuilder.emptyIRBuilder)
 
 instance (LLVM.IRBuilder.MonadIRBuilder LLVM) where
-    liftIRState ma = do
-        s <- Control.Monad.State.gets moduleState
-        let (a, s') = Control.Monad.State.Strict.runState ma s
-        Control.Monad.State.modify (\olds -> olds { moduleState = s' })
-        pure a
+  liftIRState ma = do
+    s <- Control.Monad.State.gets moduleState
+    let (a, s') = Control.Monad.State.Strict.runState ma s
+    Control.Monad.State.modify (\olds -> olds {moduleState = s'})
+    pure a
