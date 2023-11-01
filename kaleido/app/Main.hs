@@ -1,4 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
@@ -46,57 +47,63 @@ import qualified LLVM.Internal.FFI.Module
 import LLVM.Internal.Module qualified
 import LLVM.Internal.Context qualified
 
+import Control.Monad.Trans.State.Strict
+
 
 newtype BigEvilErrorType
   = ParseError Kaleido.Parser.ParserErrorBundle
 
-process :: Kaleido.CodeGen.State -> Data.Text.Text -> IO Kaleido.CodeGen.State
-process initState line =
-  handleErrors =<< runExceptT do
+type KaleidoIO m = ExceptT BigEvilErrorType (StateT Kaleido.CodeGen.State m)
+
+process :: MonadIO m => Data.Text.Text -> KaleidoIO m ()
+process line = do
     res <-
       Kaleido.Parser.parseTopLevel line
         & first ParseError
         & except
-    foldrM @[] @_ @Kaleido.AST.StatementAST @Kaleido.CodeGen.State
-      jitKaleidoStatement
-      initState
-      res
+    forM_ res jitKaleidoStatement
   where
     jitKaleidoStatement ::
-      Kaleido.AST.StatementAST ->
-      Kaleido.CodeGen.State ->
-      ExceptT BigEvilErrorType IO Kaleido.CodeGen.State
-    jitKaleidoStatement val startState = liftIO do
+      MonadIO m => Kaleido.AST.StatementAST ->
+      KaleidoIO m ()
+    jitKaleidoStatement val = do
+      startState <- lift get
       let (endState, (op, defs)) = Kaleido.CodeGen.steppableCodegen startState val
-      Data.Text.Lazy.IO.putStrLn $ LLVM.Pretty.ppll op
-      forM_ (last (Just <$> defs)) \def -> do
-        Data.Text.Lazy.IO.putStrLn . LLVM.Pretty.ppll $ def
-        llvmModuleFromDefs defs `jitDefinitionInModule` def
-      pure endState
+      case val of
+        Kaleido.AST.StatementAstExpr {} -> pure ()
+        _ -> lift $ put endState
 
-    handleErrors ::
+      liftIO do 
+        Data.Text.Lazy.IO.putStrLn $ LLVM.Pretty.ppll op
+        forM_ (last (Just <$> defs)) \def -> do
+          Data.Text.Lazy.IO.putStrLn . LLVM.Pretty.ppll $ def
+          llvmModuleFromDefs defs `jitDefinitionInModule` def
+
+handleErrors :: MonadIO m => 
       Either
         BigEvilErrorType
-        Kaleido.CodeGen.State ->
-      IO Kaleido.CodeGen.State
-    handleErrors = \case
-      Right newState -> pure newState
-      Left (ParseError e) -> initState <$ putStrLn (Text.Megaparsec.errorBundlePretty e)
+        a ->
+      m ()
+handleErrors = \case
+      Right _ -> pure ()
+      Left (ParseError e) -> liftIO $ putStrLn (Text.Megaparsec.errorBundlePretty e)
 
 main :: IO ()
-main =
-  System.Console.Haskeline.runInputT
-    System.Console.Haskeline.defaultSettings
-    (loop Kaleido.CodeGen.newEmptyState)
+main = 
+  void $ System.Console.Haskeline.runInputT
+    System.Console.Haskeline.defaultSettings (runStateT loop Kaleido.CodeGen.newEmptyState)
+     
   where
-    loop state = do
-      minput <- System.Console.Haskeline.getInputLine "ready> "
+    loop :: StateT Kaleido.CodeGen.State (System.Console.Haskeline.InputT IO) ()
+    loop = do
+      minput <- lift $ System.Console.Haskeline.getInputLine "ready> "
       case minput of
-        Nothing ->
-          let definitions = LLVM.IRBuilder.Internal.SnocList.getSnocList . LLVM.IRBuilder.Module.builderDefs $ Kaleido.CodeGen.mbsState state
+        Nothing -> do
+          endState <- get
+          let definitions = LLVM.IRBuilder.Internal.SnocList.getSnocList . LLVM.IRBuilder.Module.builderDefs $ Kaleido.CodeGen.mbsState endState
               modul = llvmModuleFromDefs definitions
            in liftIO $ finalizeModule modul
-        Just input -> liftIO (process state $ Data.Text.pack input) >>= loop
+        Just input -> runExceptT (process (Data.Text.pack input)) >>= handleErrors >> loop
 
 llvmModuleFromDefs :: [LLVM.AST.Definition] -> LLVM.AST.Module
 llvmModuleFromDefs definitions =
@@ -189,22 +196,21 @@ getFunctionFromMCJIT name (LLVM.Internal.ExecutionEngine.ExecutableModule (LLVM.
 
 getFunctionFromExecutableModule :: LLVM.AST.Name -> Foreign.Ptr.Ptr  LLVM.Internal.FFI.ExecutionEngine.ExecutionEngine
   -> Foreign.Ptr.Ptr LLVM.Internal.FFI.Module.Module -> IO (Maybe (Foreign.Ptr.FunPtr ()))
-getFunctionFromExecutableModule name e = handlePtr 0 <=< LLVM.Internal.FFI.Module.getFirstFunction 
+getFunctionFromExecutableModule name e = handlePtr <=< LLVM.Internal.FFI.Module.getFirstFunction 
   where 
-    nameMatches _ a@(LLVM.AST.Name {}) b = a == b
-    nameMatches _ a b@(LLVM.AST.Name {}) = a == b
-    nameMatches acc (LLVM.AST.UnName number) _ | acc == number = True
-    nameMatches _ _ _ = False
+    nameMatches  a@(LLVM.AST.Name {}) b = a == b
+    nameMatches  a b@(LLVM.AST.Name {}) = a == b
+    nameMatches  (LLVM.AST.UnName {}) (LLVM.AST.UnName {})  = True -- i carefully make sure there's only one
 
-    handlePtr :: Word -> Foreign.Ptr.Ptr LLVM.Internal.FFI.PtrHierarchy.Function -> IO (Maybe (Foreign.Ptr.FunPtr ()))
-    handlePtr !acc f = 
+    handlePtr :: Foreign.Ptr.Ptr LLVM.Internal.FFI.PtrHierarchy.Function -> IO (Maybe (Foreign.Ptr.FunPtr ()))
+    handlePtr f = 
       if f == Foreign.Ptr.nullPtr
         then pure Nothing
         else do
           ptrName <- LLVM.Internal.DecodeAST.runDecodeAST $ LLVM.Internal.DecodeAST.getGlobalName f
-          Debug.Trace.traceM ("with acc " <> show acc <> "\nname 1: " <> show ptrName <> ";\nname 2: " <> show name)
-          if nameMatches acc name ptrName then do
+          Debug.Trace.traceM ("name 1: " <> show ptrName <> ";\nname 2: " <> show name)
+          if nameMatches name ptrName then do
             p <- liftIO $ LLVM.Internal.FFI.ExecutionEngine.getPointerToGlobal e (LLVM.Internal.FFI.PtrHierarchy.upCast f)
             if p == Foreign.Ptr.nullPtr then pure Nothing else pure . Just $ Foreign.Ptr.castPtrToFunPtr p
-          else loopfrom (acc + 1) f
-    loopfrom !acc = handlePtr acc <=< LLVM.Internal.FFI.Module.getNextFunction 
+          else loopfrom f
+    loopfrom = handlePtr <=< LLVM.Internal.FFI.Module.getNextFunction 
